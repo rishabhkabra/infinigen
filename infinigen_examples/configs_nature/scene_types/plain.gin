@@ -2,6 +2,7 @@ compose_nature.ground_creature_registry = [
     (@CarnivoreFactory, 1),
     (@HerbivoreFactory, 1.5),
     (@BirdFactory, 0.7),
+    (@HumanFactory, 0.3),
 ]
 
 compose_nature.ground_creatures_chance = 0.0
@@ -26,3 +27,10 @@ compose_nature.bug_swarm_chance=0.0
 # scene composition config
 scene.landtiles_chance = 0
 scene.warped_rocks_chance = 0
+
+# Human factory configuration
+HumanFactory.scale = 1.0
+HumanFactory.animation_enabled = True
+HumanFactory.head_animation_frequency = 0.5
+HumanFactory.head_animation_amplitude = 30.0
+HumanFactory.head_animation_smoothness = 0.8

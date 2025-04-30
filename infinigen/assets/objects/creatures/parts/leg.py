@@ -7,6 +7,7 @@
 import numpy as np
 from numpy.random import normal as N
 from numpy.random import uniform as U
+import bpy
 
 from infinigen.assets.objects.creatures.util.creature import PartFactory
 from infinigen.assets.objects.creatures.util.genome import IKParams, Joint
@@ -564,3 +565,15 @@ class InsectLeg(PartFactory):
         part.iks = {1.0: IKParams("foot", rotation_weight=0.1, chain_parts=1)}
         tag_object(part.obj, "insect_leg")
         return part
+
+
+class HumanLeg(PartFactory):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def create_part(self):
+        # Create a simple cylinder for the leg
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.2, depth=2)
+        leg = bpy.context.active_object
+        leg.name = "HumanLeg"
+        return leg

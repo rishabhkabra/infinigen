@@ -93,15 +93,26 @@ logger = logging.getLogger(__name__)
 
 
 @gin.configurable
-def compose_nature(output_folder, scene_seed, **params):
-    p = pipeline.RandomStageExecutor(scene_seed, output_folder, params)
+def compose_nature(
+    scene_seed,
+    output_dir,
+    scene,
+    camera,
+    camera_motion,
+    compositor_nodes,
+    metadata,
+    **kwargs
+):
+    """Compose a full nature scene with all assets"""
+    
+    p = pipeline.RandomStageExecutor(scene_seed, output_dir, kwargs)
 
     def add_coarse_terrain():
         terrain = Terrain(
             scene_seed,
             surface.registry,
             task="coarse",
-            on_the_fly_asset_folder=output_folder / "assets",
+            on_the_fly_asset_folder=output_dir / "assets",
         )
         terrain_mesh = terrain.coarse_terrain()
         density.set_tag_dict(terrain.tag_dict)
@@ -119,9 +130,9 @@ def compose_nature(output_folder, scene_seed, **params):
         terrain_mesh, bpy.context.evaluated_depsgraph_get()
     )
 
-    land_domain = params.get("land_domain_tags")
-    underwater_domain = params.get("underwater_domain_tags")
-    nonliving_domain = params.get("nonliving_domain_tags")
+    land_domain = kwargs.get("land_domain_tags")
+    underwater_domain = kwargs.get("underwater_domain_tags")
+    nonliving_domain = kwargs.get("nonliving_domain_tags")
 
     p.run_stage("fancy_clouds", weather.kole_clouds.add_kole_clouds)
 
@@ -130,11 +141,11 @@ def compose_nature(output_folder, scene_seed, **params):
 
     def choose_forest_params():
         # params to be shared between unique and instanced trees
-        n_tree_species = randint(1, params.get("max_tree_species", 3) + 1)
+        n_tree_species = randint(1, kwargs.get("max_tree_species", 3) + 1)
 
         def tree_params():
             return {
-                "density": params.get("tree_density", uniform(0.045, 0.15))
+                "density": kwargs.get("tree_density", uniform(0.045, 0.15))
                 / n_tree_species,
                 "distance_min": uniform(1, 2.5),
                 "select_scale": uniform(0.03, 0.3),
@@ -162,10 +173,10 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("trees", add_trees, terrain_mesh)
 
     def add_bushes(terrain_mesh):
-        n_bush_species = randint(1, params.get("max_bush_species", 2) + 1)
+        n_bush_species = randint(1, kwargs.get("max_bush_species", 2) + 1)
         for i in range(n_bush_species):
             spec_density = (
-                params.get("bush_density", uniform(0.03, 0.12)) / n_bush_species
+                kwargs.get("bush_density", uniform(0.03, 0.12)) / n_bush_species
             )
             fac = trees.BushFactory(int_hash((scene_seed, i)), coarse=True)
             selection = density.placement_mask(
@@ -194,7 +205,7 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("clouds", add_clouds, terrain_mesh)
 
     def add_boulders(terrain_mesh):
-        n_boulder_species = randint(1, params.get("max_boulder_species", 5))
+        n_boulder_species = randint(1, kwargs.get("max_boulder_species", 5))
         for i in range(n_boulder_species):
             selection = density.placement_mask(
                 0.05, tag=nonliving_domain, select_thresh=uniform(0.55, 0.6)
@@ -203,7 +214,7 @@ def compose_nature(output_folder, scene_seed, **params):
             placement.scatter_placeholders_mesh(
                 terrain_mesh,
                 fac,
-                overall_density=params.get("boulder_density", uniform(0.02, 0.05))
+                overall_density=kwargs.get("boulder_density", uniform(0.02, 0.05))
                 / n_boulder_species,
                 selection=selection,
                 altitude=-0.25,
@@ -211,7 +222,7 @@ def compose_nature(output_folder, scene_seed, **params):
 
     p.run_stage("boulders", add_boulders, terrain_mesh)
 
-    fluid.cached_fire_scenecomp_options(p, terrain_mesh, params, tree_species_params)
+    fluid.cached_fire_scenecomp_options(p, terrain_mesh, kwargs, tree_species_params)
 
     def add_glowing_rocks(terrain_mesh):
         selection = density.placement_mask(
@@ -221,7 +232,7 @@ def compose_nature(output_folder, scene_seed, **params):
         placement.scatter_placeholders_mesh(
             terrain_mesh,
             fac,
-            overall_density=params.get("glow_rock_density", 0.025),
+            overall_density=kwargs.get("glow_rock_density", 0.025),
             selection=selection,
         )
 
@@ -234,7 +245,7 @@ def compose_nature(output_folder, scene_seed, **params):
             terrain_mesh,
             fac,
             altitude=-0.05,
-            overall_density=params.get("kelp_density", uniform(0.2, 1)),
+            overall_density=kwargs.get("kelp_density", uniform(0.2, 1)),
             selection=selection,
             distance_min=3,
         )
@@ -242,7 +253,7 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("kelp", add_kelp, terrain_mesh)
 
     def add_cactus(terrain_mesh):
-        n_cactus_species = randint(2, params.get("max_cactus_species", 4))
+        n_cactus_species = randint(2, kwargs.get("max_cactus_species", 4))
         for i in range(n_cactus_species):
             fac = cactus.CactusFactory(int_hash((scene_seed, i)), coarse=True)
             selection = density.placement_mask(
@@ -252,7 +263,7 @@ def compose_nature(output_folder, scene_seed, **params):
                 terrain_mesh,
                 fac,
                 altitude=-0.05,
-                overall_density=params.get(
+                overall_density=kwargs.get(
                     "cactus_density", uniform(0.02, 0.1) / n_cactus_species
                 ),
                 selection=selection,
@@ -266,9 +277,9 @@ def compose_nature(output_folder, scene_seed, **params):
         scene_preprocessed = cam_util.camera_selection_preprocessing(
             terrain,
             terrain_mesh,
-            tags_ratio=params.get("camera_selection_tags_ratio"),
-            ranges_ratio=params.get("camera_selection_ranges_ratio"),
-            anim_criterion_keys=params.get(
+            tags_ratio=kwargs.get("camera_selection_tags_ratio"),
+            ranges_ratio=kwargs.get("camera_selection_ranges_ratio"),
+            anim_criterion_keys=kwargs.get(
                 "camera_selection_anim_criterion_keys", False
             ),
         )
@@ -307,7 +318,7 @@ def compose_nature(output_folder, scene_seed, **params):
     terrain_center, *_ = split_in_view.split_inview(
         terrain_mesh,
         primary_cams,
-        dist_max=params["center_distance"],
+        dist_max=kwargs["center_distance"],
         vis_margin=5,
         frame_start=0,
         frame_end=0,
@@ -321,9 +332,9 @@ def compose_nature(output_folder, scene_seed, **params):
     pois = []  # objects / points of interest, for the camera to look at
 
     def add_ground_creatures(target):
-        fac_class = sample_registry(params["ground_creature_registry"])
+        fac_class = sample_registry(kwargs["ground_creature_registry"])
         fac = fac_class(int_hash((scene_seed, 0)), bvh=scene_bvh, animation_mode="idle")
-        n = params.get("max_ground_creatures", randint(1, 4))
+        n = kwargs.get("max_ground_creatures", randint(1, 4))
         selection = (
             density.placement_mask(
                 select_thresh=0, tag="beach", altitude_range=(-0.5, 0.5)
@@ -346,9 +357,9 @@ def compose_nature(output_folder, scene_seed, **params):
     )
 
     def flying_creatures():
-        fac_class = sample_registry(params["flying_creature_registry"])
+        fac_class = sample_registry(kwargs["flying_creature_registry"])
         fac = fac_class(randint(1e7), bvh=scene_bvh, animation_mode="idle")
-        n = params.get("max_flying_creatures", randint(2, 7))
+        n = kwargs.get("max_flying_creatures", randint(2, 7))
         col = placement.scatter_placeholders_mesh(
             terrain_center, fac, num_placeholders=n, overall_density=1, altitude=0.2
         )
@@ -359,7 +370,7 @@ def compose_nature(output_folder, scene_seed, **params):
     def animate_cameras():
         cam_util.animate_cameras(camera_rigs, bbox, scene_preprocessed, pois=pois)
 
-        frames_folder = output_folder.parent / "frames"
+        frames_folder = output_dir.parent / "frames"
         animated_cams = [cam for cam in camera_rigs if cam.animation_data is not None]
         save_imu_tum_files(frames_folder / "imu_tum", animated_cams)
 
@@ -376,7 +387,7 @@ def compose_nature(output_folder, scene_seed, **params):
             verbose=True,
             outofview=False,
             vis_margin=2,
-            dist_max=params["inview_distance"],
+            dist_max=kwargs["inview_distance"],
             hide_render=True,
             suffix="inview",
         )
@@ -386,7 +397,7 @@ def compose_nature(output_folder, scene_seed, **params):
             verbose=True,
             outofview=False,
             vis_margin=2,
-            dist_max=params["near_distance"],
+            dist_max=kwargs["near_distance"],
             hide_render=True,
             suffix="near",
         )
@@ -410,7 +421,7 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("caustics", lambda: lighting.caustics_lamp.add_caustics(terrain_near))
 
     def add_fish_school():
-        n = random_general(params.get("max_fish_schools", 3))
+        n = random_general(kwargs.get("max_fish_schools", 3))
         for i in range(n):
             selection = density.placement_mask(
                 0.1, select_thresh=0, tag=underwater_domain
@@ -429,7 +440,7 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("fish_school", add_fish_school, default=[])
 
     def add_bug_swarm():
-        n = randint(1, params.get("max_bug_swarms", 3) + 1)
+        n = randint(1, kwargs.get("max_bug_swarms", 3) + 1)
         selection = density.placement_mask(0.1, select_thresh=0, tag=land_domain)
         fac = creatures.AntSwarmFactory(
             randint(1e7), bvh=terrain_inview_bvh, coarse=True
@@ -497,7 +508,7 @@ def compose_nature(output_folder, scene_seed, **params):
     p.run_stage("chopped_trees", add_chopped_trees, terrain_inview)
 
     def add_grass(target):
-        select_max = params.get("grass_select_max", 0.5)
+        select_max = kwargs.get("grass_select_max", 0.5)
         selection = density.placement_mask(
             normal_dir=(0, 0, 1),
             scale=0.1,
@@ -518,7 +529,7 @@ def compose_nature(output_folder, scene_seed, **params):
             normal_dir=(0, 0, 1),
             scale=0.2,
             select_thresh=0.55,
-            tag=params.get("grass_habitats", None),
+            tag=kwargs.get("grass_habitats", None),
         )
         monocots.apply(target, grass=False, selection=selection)
 
@@ -556,7 +567,7 @@ def compose_nature(output_folder, scene_seed, **params):
             target,
             selection=vertical_faces,
             tag=underwater_domain,
-            density=params.get("coral_density", 2.5),
+            density=kwargs.get("coral_density", 2.5),
         )
         horizontal_faces = density.placement_mask(
             scale=0.15, normal_thresh=-0.4, normal_thresh_high=0.4
@@ -567,7 +578,7 @@ def compose_nature(output_folder, scene_seed, **params):
             n=5,
             horizontal=True,
             tag=underwater_domain,
-            density=params.get("horizontal_coral_density", 2.5),
+            density=kwargs.get("horizontal_coral_density", 2.5),
         )
 
     p.run_stage("corals", add_corals, terrain_inview)
@@ -579,7 +590,7 @@ def compose_nature(output_folder, scene_seed, **params):
             selection=density.placement_mask(
                 scale=0.1, select_thresh=0.65, return_scalar=True, tag=land_domain
             ),
-            density=params.get("mushroom_density", 2),
+            density=kwargs.get("mushroom_density", 2),
         ),
     )
 
@@ -718,18 +729,18 @@ def compose_nature(output_folder, scene_seed, **params):
     )
 
     def add_simulated_river():
-        return fluid.make_river(terrain_mesh, placeholders, output_folder=output_folder)
+        return fluid.make_river(terrain_mesh, placeholders, output_folder=output_dir)
 
     p.run_stage("simulated_river", add_simulated_river, use_chance=False)
 
     def add_tilted_river():
         return fluid.make_tilted_river(
-            terrain_mesh, placeholders, output_folder=output_folder
+            terrain_mesh, placeholders, output_folder=output_dir
         )
 
     p.run_stage("tilted_river", add_tilted_river, use_chance=False)
 
-    p.save_results(output_folder / "pipeline_coarse.csv")
+    p.save_results(output_dir / "pipeline_coarse.csv")
     return {
         "height_offset": 0,
         "whole_bbox": None,

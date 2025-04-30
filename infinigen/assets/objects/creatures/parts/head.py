@@ -6,6 +6,7 @@
 
 import numpy as np
 from numpy.random import normal as N
+import bpy
 
 from infinigen.assets.objects.creatures.parts.eye import nodegroup_mammal_eye
 from infinigen.assets.objects.creatures.util import part_util
@@ -1123,3 +1124,15 @@ class FlyingBirdHead(PartFactory):
         part.settings["rig_extras"] = True
         tag_object(part.obj, "bird_head")
         return part
+
+
+class HumanHead(PartFactory):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def create_part(self):
+        # Create a simple sphere for the head
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=1)
+        head = bpy.context.active_object
+        head.name = "HumanHead"
+        return head
